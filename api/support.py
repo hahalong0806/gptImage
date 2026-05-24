@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Event, Thread
+from urllib.parse import urlunsplit
 
 from fastapi import HTTPException, Request
 
@@ -46,8 +47,30 @@ def require_admin(authorization: str | None) -> dict[str, object]:
     return identity
 
 
+def _first_header_value(value: str | None) -> str:
+    return str(value or "").split(",", 1)[0].strip()
+
+
+def _forwarded_proto(value: str | None) -> str:
+    for part in str(value or "").split(";"):
+        key, _, raw = part.strip().partition("=")
+        if key.lower() == "proto":
+            return raw.strip().strip('"').lower()
+    return ""
+
+
 def resolve_image_base_url(request: Request) -> str:
-    return config.base_url or f"{request.url.scheme}://{request.headers.get('host', request.url.netloc)}"
+    if config.base_url:
+        return config.base_url
+    host = _first_header_value(request.headers.get("x-forwarded-host")) or request.headers.get("host", request.url.netloc)
+    proto = (
+        _first_header_value(request.headers.get("x-forwarded-proto")).lower()
+        or _forwarded_proto(request.headers.get("forwarded"))
+        or request.url.scheme
+    )
+    if proto not in {"http", "https"}:
+        proto = request.url.scheme
+    return urlunsplit((proto, host, "", "", "")).rstrip("/")
 
 
 def raise_image_quota_error(exc: Exception) -> None:

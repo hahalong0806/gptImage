@@ -122,12 +122,28 @@ function buildReferenceImageFromResult(image: StoredImage, fileName: string): St
 }
 
 async function fetchImageAsFile(url: string, fileName: string) {
-  const response = await fetch(url);
+  const response = await fetch(normalizeBrowserFetchUrl(url));
   if (!response.ok) {
     throw new Error("读取结果图失败");
   }
   const blob = await response.blob();
   return new File([blob], fileName, { type: blob.type || "image/png" });
+}
+
+function normalizeBrowserFetchUrl(url: string) {
+  if (typeof window === "undefined" || window.location.protocol !== "https:") {
+    return url;
+  }
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (parsed.protocol === "http:" && parsed.host === window.location.host) {
+      parsed.protocol = "https:";
+      return parsed.toString();
+    }
+  } catch {
+    return url;
+  }
+  return url;
 }
 
 async function buildReferenceImageFromStoredImage(image: StoredImage, fileName: string) {
