@@ -542,6 +542,7 @@ class TempMailLolProvider(BaseMailProvider):
 
     def __init__(self, entry: dict, conf: dict):
         super().__init__(conf, str(entry.get("provider_ref") or ""))
+        self.api_base = str(entry.get("api_base") or "https://api.tempmail.lol/v2").rstrip("/")
         self.api_key = str(entry.get("api_key") or "").strip()
         self.domain = [str(item).strip() for item in (entry.get("domain") or []) if str(item).strip()]
         self.session = requests.Session()
@@ -549,6 +550,9 @@ class TempMailLolProvider(BaseMailProvider):
         self.session.headers.update({"User-Agent": conf["user_agent"], "Accept": "application/json", "Content-Type": "application/json"})
         if self.api_key:
             self.session.headers["Authorization"] = f"Bearer {self.api_key}"
+        proxy = str(conf.get("proxy") or "").strip()
+        if proxy:
+            self.session.proxies = {"http": proxy, "https": proxy}
 
     @staticmethod
     def _resolve_domain(domain: str) -> tuple[str, bool]:
@@ -558,12 +562,14 @@ class TempMailLolProvider(BaseMailProvider):
         return text, False
 
     def _request(self, method: str, path: str, params: dict | None = None, payload: dict | None = None, expected: tuple[int, ...] = (200,)):
-        resp = self.session.request(method.upper(), f"https://api.tempmail.lol/v2{path}", params=params, json=payload, timeout=self.conf["request_timeout"], verify=False)
+        resp = self.session.request(method.upper(), f"{self.api_base}{path}", params=params, json=payload, timeout=self.conf["request_timeout"], verify=False)
         if resp.status_code not in expected:
             raise RuntimeError(f"TempMail.lol 请求失败: {method} {path}, HTTP {resp.status_code}, body={resp.text[:300]}")
         data = resp.json()
         if not isinstance(data, dict):
             raise RuntimeError(f"TempMail.lol {method} {path} 返回结构不是对象")
+        if data.get("expired") is True:
+            raise RuntimeError("TempMail.lol token 已过期")
         return data
 
     def create_mailbox(self, username: str | None = None) -> dict[str, Any]:
@@ -591,6 +597,110 @@ class TempMailLolProvider(BaseMailProvider):
         item = max(messages, key=lambda value: ((_parse_received_at(value.get("created_at") or value.get("createdAt") or value.get("date") or value.get("received_at") or value.get("timestamp")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(), str(value.get("id") or value.get("token") or "")))
         text_content, html_content = _extract_content(item)
         return {"provider": self.name, "mailbox": mailbox["address"], "message_id": str(item.get("id") or item.get("token") or ""), "subject": str(item.get("subject") or ""), "sender": str(item.get("from") or item.get("from_address") or ""), "text_content": text_content, "html_content": html_content, "received_at": _parse_received_at(item.get("created_at") or item.get("createdAt") or item.get("date") or item.get("received_at") or item.get("timestamp")), "raw": item}
+
+    def close(self) -> None:
+        self.session.close()
+
+
+class MailTmProvider(BaseMailProvider):
+    name = "mailtm"
+
+    def __init__(self, entry: dict, conf: dict):
+        super().__init__(conf, str(entry.get("provider_ref") or ""))
+        self.api_base = str(entry.get("api_base") or "https://api.mail.tm").rstrip("/")
+        self.domain = _normalize_string_list(entry.get("domain"))
+        self.attempts = max(1, int(entry.get("attempts") or 8))
+        self.session = requests.Session()
+        self.session.trust_env = False
+        self.session.headers.update({"User-Agent": conf["user_agent"], "Accept": "application/json", "Content-Type": "application/json"})
+        proxy = str(conf.get("proxy") or "").strip()
+        if proxy:
+            self.session.proxies = {"http": proxy, "https": proxy}
+
+    @staticmethod
+    def _items(data: Any) -> list:
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("hydra:member", "member", "data", "messages"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+        return []
+
+    def _request(self, method: str, path: str, token: str = "", params: dict | None = None, payload: dict | None = None, expected: tuple[int, ...] = (200,)) -> dict | list:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        resp = self.session.request(method.upper(), f"{self.api_base}{path}", headers=headers, params=params, json=payload, timeout=self.conf["request_timeout"], verify=False)
+        if resp.status_code not in expected:
+            raise RuntimeError(f"Mail.tm 请求失败: {method} {path}, HTTP {resp.status_code}, body={resp.text[:300]}")
+        if resp.status_code == 204 or not str(resp.text or "").strip():
+            return {}
+        return resp.json()
+
+    def _pick_domain(self) -> str:
+        if self.domain:
+            return _next_domain(self.domain)
+        data = self._request("GET", "/domains")
+        domains = []
+        for item in self._items(data):
+            if not isinstance(item, dict):
+                continue
+            domain = str(item.get("domain") or "").strip().lower()
+            if domain and item.get("isActive", True):
+                domains.append(domain)
+        if not domains:
+            raise RuntimeError("Mail.tm 没有可用域名")
+        return _next_domain(domains)
+
+    def create_mailbox(self, username: str | None = None) -> dict[str, Any]:
+        domain = self._pick_domain()
+        last_error = ""
+        for attempt in range(self.attempts):
+            password = "".join(random.choices(string.ascii_letters + string.digits, k=24))
+            prefix = username if username and attempt == 0 else _random_mailbox_name()
+            address = f"{prefix}@{domain}"
+            payload = {"address": address, "password": password}
+            try:
+                account = self._request("POST", "/accounts", payload=payload, expected=(200, 201))
+                created_address = str(account.get("address") if isinstance(account, dict) else "").strip() or address
+                token_data = self._request("POST", "/token", payload={"address": created_address, "password": password}, expected=(200, 201))
+                token = str(token_data.get("token") if isinstance(token_data, dict) else "").strip()
+                if not token:
+                    raise RuntimeError("Mail.tm token 返回为空")
+                return {"provider": self.name, "provider_ref": self.provider_ref, "address": created_address, "token": token, "password": password, "domain": domain}
+            except RuntimeError as error:
+                last_error = str(error)
+                if "HTTP 422" not in last_error and "HTTP 429" not in last_error:
+                    raise
+                time.sleep(min(5.0, 1.0 + attempt))
+        raise RuntimeError(last_error or "Mail.tm 创建邮箱失败")
+
+    def fetch_latest_message(self, mailbox: dict[str, Any]) -> dict[str, Any] | None:
+        token = str(mailbox.get("token") or "").strip()
+        if not token:
+            raise RuntimeError("Mail.tm 缺少 token")
+        data = self._request("GET", "/messages", token=token)
+        messages = [item for item in self._items(data) if isinstance(item, dict)]
+        if not messages:
+            return None
+        item = max(messages, key=lambda value: ((_parse_received_at(value.get("createdAt") or value.get("created_at") or value.get("receivedAt") or value.get("date")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(), str(value.get("id") or "")))
+        message_id = str(item.get("id") or item.get("@id") or "").replace("/messages/", "")
+        if message_id:
+            detail = self._request("GET", f"/messages/{message_id}", token=token)
+            if isinstance(detail, dict):
+                item = detail
+        if not _message_matches_email(item, str(mailbox.get("address") or "")):
+            return None
+        text_content = item.get("text") or item.get("text_content") or ""
+        if isinstance(text_content, list):
+            text_content = "\n".join(str(value) for value in text_content)
+        html_content = item.get("html") or item.get("html_content") or ""
+        if isinstance(html_content, list):
+            html_content = "\n".join(str(value) for value in html_content)
+        sender = item.get("from") or item.get("sender") or ""
+        if isinstance(sender, dict):
+            sender = sender.get("address") or sender.get("email") or sender.get("name") or ""
+        return {"provider": self.name, "mailbox": mailbox["address"], "message_id": message_id, "subject": str(item.get("subject") or ""), "sender": str(sender), "text_content": str(text_content), "html_content": str(html_content), "received_at": _parse_received_at(item.get("createdAt") or item.get("created_at") or item.get("receivedAt") or item.get("date")), "raw": item}
 
     def close(self) -> None:
         self.session.close()
@@ -948,6 +1058,8 @@ def _create_provider(mail_config: dict, provider: str = "", provider_ref: str = 
         return DDGMailProvider(entry, conf)
     if entry["type"] == "tempmail_lol":
         return TempMailLolProvider(entry, conf)
+    if entry["type"] == "mailtm":
+        return MailTmProvider(entry, conf)
     if entry["type"] == "duckmail":
         return DuckMailProvider(entry, conf)
     if entry["type"] == "gptmail":
