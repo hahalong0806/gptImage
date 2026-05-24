@@ -192,7 +192,7 @@ class ConfigStore:
             raise ValueError(
                 "❌ auth-key 未设置！\n"
                 "请按以下任意一种方式解决：\n"
-                "1. 在 Render 的 Environment 变量中添加：\n"
+                "1. 在 Hugging Face Space Secrets 或 Docker 环境变量中添加：\n"
                 "   CHATGPT2API_AUTH_KEY = your_real_auth_key\n"
                 "2. 或者在 config.json 中填写：\n"
                 '   "auth-key": "your_real_auth_key"'

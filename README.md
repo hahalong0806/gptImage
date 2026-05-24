@@ -53,7 +53,7 @@ docker compose up -d
 1. 在 Hugging Face 新建 Space，选择 `Docker` SDK。
 2. 将本仓库推送到 Space 仓库，或在 Space 中导入此仓库。
 3. 在 Space 的 `Settings -> Variables and secrets` 中添加 Secret：
-   - `CHATGPT2API_AUTH_KEY`：必填，公网访问 API 和管理面板使用的认证密钥。
+   - `CHATGPT2API_AUTH_KEY`：推荐设置，公网访问 API 和管理面板使用的认证密钥。未设置时镜像默认使用 `a123456789`。
    - `CHATGPT2API_BASE_URL`：可选，建议填 `https://<用户名>-<Space名>.hf.space`，用于生成图片 URL。
    - `STORAGE_BACKEND`：可选，默认 `json`。免费 Space 的容器文件系统会随重建丢失，建议使用 `postgres` 或 `git`。
 4. 如需长期保存账号、密钥或任务数据，不建议依赖免费 Space 的容器本地目录。推荐设置外部存储：
