@@ -40,7 +40,7 @@ cd chatgpt2api
 docker compose up -d
 ```
 
-启动前请先在 `config.json` 中设置 `auth-key`，也可以在 `docker-compose.yml` 中通过 `CHATGPT2API_AUTH_KEY` 覆盖。
+启动前请先通过环境变量 `CHATGPT2API_AUTH_KEY` 设置访问密钥；也可以通过 `CHATGPT2API_CONFIG_FILE` 指定外部 `config.json`。
 
 - Web 面板：`http://localhost:3000`
 - API 地址：`http://localhost:3000/v1`
@@ -55,9 +55,11 @@ docker compose up -d
 3. 在 Space 的 `Settings -> Variables and secrets` 中添加 Secret：
    - `CHATGPT2API_AUTH_KEY`：必填，公网访问 API 和管理面板使用的认证密钥。
    - `CHATGPT2API_BASE_URL`：可选，建议填 `https://<用户名>-<Space名>.hf.space`，用于生成图片 URL。
+   - `STORAGE_BACKEND`：可选，默认 `json`。免费 Space 的容器文件系统会随重建丢失，建议使用 `postgres` 或 `git`。
 4. 如需长期保存账号、密钥或任务数据，不建议依赖免费 Space 的容器本地目录。推荐设置外部存储：
    - PostgreSQL / Supabase：`STORAGE_BACKEND=postgres`，并设置 `DATABASE_URL`。
    - Git 私有仓库：`STORAGE_BACKEND=git`，并设置 `GIT_REPO_URL`、`GIT_TOKEN`、`GIT_BRANCH`。
+5. 如已为 Space 开启 Persistent Storage，镜像默认会把本地数据和运行期配置写入 `/data/chatgpt2api`。
 
 部署完成后：
 

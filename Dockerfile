@@ -22,6 +22,8 @@ ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
+    CHATGPT2API_DATA_DIR=/data/chatgpt2api \
+    CHATGPT2API_CONFIG_FILE=/data/chatgpt2api/config.json \
     PORT=7860
 
 WORKDIR /app
@@ -43,7 +45,6 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY main.py ./
-COPY config.json ./
 COPY VERSION ./
 COPY api ./api
 COPY services ./services
@@ -51,6 +52,12 @@ COPY utils ./utils
 COPY scripts ./scripts
 COPY --from=web-build /app/web/out ./web_dist
 
+RUN mkdir -p /data/chatgpt2api \
+    && useradd -m -u 1000 user \
+    && chown -R user:user /app /data
+
+USER user
+
 EXPOSE 7860
 
-CMD ["sh", "-c", "if [ -z \"${CHATGPT2API_AUTH_KEY}\" ] && grep -q '\"auth-key\": \"chatgpt2api\"' /app/config.json; then echo 'CHATGPT2API_AUTH_KEY is required. Set it as a Hugging Face Space Secret or change config.json before starting.' >&2; exit 1; fi; exec uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860} --access-log"]
+CMD ["sh", "-c", "exec uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860} --access-log"]
