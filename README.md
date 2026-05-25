@@ -35,12 +35,12 @@ license: mit
 ### Docker 运行
 
 ```bash
-git clone git@github.com:basketikun/chatgpt2api.git
-cd chatgpt2api
+git clone git@github.com:hahalong0806/gptImage.git
+cd gptImage
 docker compose up -d
 ```
 
-启动前请先通过环境变量 `CHATGPT2API_AUTH_KEY` 设置访问密钥；也可以通过 `CHATGPT2API_CONFIG_FILE` 指定外部 `config.json`。
+默认使用 GitHub Actions 构建并推送到 GHCR 的镜像：`ghcr.io/hahalong0806/gptimage:latest`。启动前请先通过环境变量 `CHATGPT2API_AUTH_KEY` 设置访问密钥；也可以通过 `CHATGPT2API_CONFIG_FILE` 指定外部 `config.json`。
 
 - Web 面板：`http://localhost:3010`
 - API 地址：`http://localhost:3010/v1`
@@ -90,19 +90,21 @@ bun run dev
 ```bash
 git pull
 docker compose down
-docker compose build
+docker compose pull
 docker compose up -d
 
 ```
 
-如果更新后怀疑依赖缓存、前端静态文件或镜像层没有刷新，可以改用：
+代码推送到 `main` 后，`.github/workflows/docker-build.yml` 会自动构建 `linux/amd64` 和 `linux/arm64` 镜像并推送到 `ghcr.io/hahalong0806/gptimage:latest`。服务器配置较低时推荐使用这种镜像部署方式，服务器只需要拉取镜像，不需要本机编译前端和 Python 依赖。
+
+如果需要在服务器上临时使用源码构建，可以执行：
 
 ```bash
 docker compose build --no-cache
 docker compose up -d
 ```
 
-使用源码部署时，只要改动了前端页面、后端 Python 逻辑、Dockerfile、依赖或静态资源，都需要重新 `docker compose build`，因为前端会在镜像构建阶段打包进容器。仅修改 `docker-compose.yml` 中的环境变量，例如 `CHATGPT2API_AUTH_KEY`、`CHATGPT2API_BASE_URL`、`STORAGE_BACKEND`、`DATABASE_URL`，通常不需要重新构建，执行 `docker compose up -d` 或 `docker compose restart` 即可。
+使用源码构建时，只要改动了前端页面、后端 Python 逻辑、Dockerfile、依赖或静态资源，都需要重新 `docker compose build`，因为前端会在镜像构建阶段打包进容器。使用 GHCR 镜像部署时，只需要等待 GitHub Actions 构建完成，然后在服务器执行 `docker compose pull && docker compose up -d`。仅修改 `docker-compose.yml` 中的环境变量，例如 `CHATGPT2API_AUTH_KEY`、`CHATGPT2API_BASE_URL`、`STORAGE_BACKEND`、`DATABASE_URL`，通常不需要重新构建或重新拉镜像，执行 `docker compose up -d` 或 `docker compose restart` 即可。
 
 ### 存储后端配置
 

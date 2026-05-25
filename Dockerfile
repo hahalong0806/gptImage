@@ -53,11 +53,7 @@ COPY utils ./utils
 COPY scripts ./scripts
 COPY --from=web-build /app/web/out ./web_dist
 
-RUN mkdir -p /app/data \
-    && useradd -m -u 1000 user \
-    && chown -R user:user /app
-
-USER user
+RUN mkdir -p /app/data
 
 EXPOSE 80
 

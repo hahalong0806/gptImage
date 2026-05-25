@@ -1,9 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: chatgpt2api:custom
+    image: ghcr.io/hahalong0806/gptimage:latest
     container_name: chatgpt2api
     restart: unless-stopped
     ports:
