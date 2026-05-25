@@ -4,7 +4,7 @@ services:
     container_name: chatgpt2api
     restart: unless-stopped
     ports:
-      - "3010:7860"
+      - "3010:80"
     volumes:
       - ./data:/data/chatgpt2api
     environment:
