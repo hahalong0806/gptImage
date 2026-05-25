@@ -42,8 +42,8 @@ docker compose up -d
 
 启动前请先通过环境变量 `CHATGPT2API_AUTH_KEY` 设置访问密钥；也可以通过 `CHATGPT2API_CONFIG_FILE` 指定外部 `config.json`。
 
-- Web 面板：`http://localhost:3000`
-- API 地址：`http://localhost:3000/v1`
+- Web 面板：`http://localhost:3010`
+- API 地址：`http://localhost:3010/v1`
 - 数据目录：`./data`
 
 ### Hugging Face Spaces 免费部署
