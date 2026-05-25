@@ -88,11 +88,21 @@ bun run dev
 后续更新新版本：
 
 ```bash
+git pull
 docker compose down
-docker compose build --no-cache
+docker compose build
 docker compose up -d
 
 ```
+
+如果更新后怀疑依赖缓存、前端静态文件或镜像层没有刷新，可以改用：
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+使用源码部署时，只要改动了前端页面、后端 Python 逻辑、Dockerfile、依赖或静态资源，都需要重新 `docker compose build`，因为前端会在镜像构建阶段打包进容器。仅修改 `docker-compose.yml` 中的环境变量，例如 `CHATGPT2API_AUTH_KEY`、`CHATGPT2API_BASE_URL`、`STORAGE_BACKEND`、`DATABASE_URL`，通常不需要重新构建，执行 `docker compose up -d` 或 `docker compose restart` 即可。
 
 ### 存储后端配置
 
