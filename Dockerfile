@@ -23,9 +23,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     CHATGPT2API_AUTH_KEY=a123456789 \
-    CHATGPT2API_DATA_DIR=/data/chatgpt2api \
-    CHATGPT2API_CONFIG_FILE=/data/chatgpt2api/config.json \
-    PORT=7860
+    CHATGPT2API_DATA_DIR=/app/data \
+    CHATGPT2API_CONFIG_FILE=/app/data/config.json \
+    PORT=80
 
 WORKDIR /app
 
@@ -53,12 +53,12 @@ COPY utils ./utils
 COPY scripts ./scripts
 COPY --from=web-build /app/web/out ./web_dist
 
-RUN mkdir -p /data/chatgpt2api \
+RUN mkdir -p /app/data \
     && useradd -m -u 1000 user \
-    && chown -R user:user /app /data
+    && chown -R user:user /app
 
 USER user
 
-EXPOSE 7860
+EXPOSE 80
 
-CMD ["sh", "-c", "exec uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860} --access-log"]
+CMD ["sh", "-c", "exec uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-80} --access-log"]

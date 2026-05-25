@@ -1,7 +1,7 @@
 ---
 title: ChatGPT2API
 sdk: docker
-app_port: 7860
+app_port: 80
 pinned: false
 license: mit
 ---
@@ -48,7 +48,7 @@ docker compose up -d
 
 ### Hugging Face Spaces 免费部署
 
-本项目可作为 Hugging Face Docker Space 部署。仓库根目录的 `README.md` 已包含 Space 元数据，Docker 容器默认监听 `7860` 端口。
+本项目可作为 Hugging Face Docker Space 部署。仓库根目录的 `README.md` 已包含 Space 元数据，Docker 容器默认监听 `80` 端口。
 
 1. 在 Hugging Face 新建 Space，选择 `Docker` SDK。
 2. 将本仓库推送到 Space 仓库，或在 Space 中导入此仓库。
@@ -59,7 +59,7 @@ docker compose up -d
 4. 如需长期保存账号、密钥或任务数据，不建议依赖免费 Space 的容器本地目录。推荐设置外部存储：
    - PostgreSQL / Supabase：`STORAGE_BACKEND=postgres`，并设置 `DATABASE_URL`。
    - Git 私有仓库：`STORAGE_BACKEND=git`，并设置 `GIT_REPO_URL`、`GIT_TOKEN`、`GIT_BRANCH`。
-5. 如已为 Space 开启 Persistent Storage，镜像默认会把本地数据和运行期配置写入 `/data/chatgpt2api`。
+5. 如已为 Space 开启 Persistent Storage，镜像默认会把本地数据和运行期配置写入 `/app/data`。
 
 部署完成后：
 
@@ -88,9 +88,9 @@ bun run dev
 后续更新新版本：
 
 ```bash
-docker pull ghcr.io/basketikun/chatgpt2api:latest
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 
 ```
 
