@@ -209,6 +209,53 @@ class AccountService:
         with self._lock:
             return [dict(item) for item in self._accounts.values()]
 
+    def build_export_items(self, access_tokens: list[str] | None = None) -> list[dict[str, str]]:
+        """Build exportable account payloads.
+
+        Export is intentionally limited to complete OAuth account records.  A
+        plain access_token-only account cannot be restored elsewhere, so it is
+        skipped instead of producing a broken export file.
+        """
+        target_tokens = list(dict.fromkeys(str(token or "").strip() for token in (access_tokens or []) if str(token or "").strip()))
+        target_set = set(target_tokens)
+        export_keys = (
+            "access_token",
+            "refresh_token",
+            "id_token",
+            "account_id",
+            "email",
+            "expired",
+            "last_refresh",
+            "type",
+            "export_type",
+            "user_id",
+            "default_model_slug",
+        )
+        required_keys = ("access_token", "refresh_token", "id_token")
+
+        with self._lock:
+            source_items = [
+                self._accounts[token]
+                for token in target_tokens
+                if token in self._accounts
+            ] if target_tokens else list(self._accounts.values())
+
+            items: list[dict[str, str]] = []
+            for account in source_items:
+                if not all(str(account.get(key) or "").strip() for key in required_keys):
+                    continue
+                item = {
+                    key: str(value).strip()
+                    for key in export_keys
+                    if (value := account.get(key)) is not None and str(value).strip()
+                }
+                if "type" not in item:
+                    item["type"] = "free"
+                if target_set and item.get("access_token") not in target_set:
+                    continue
+                items.append(item)
+            return items
+
     def list_limited_tokens(self) -> list[str]:
         with self._lock:
             return [
