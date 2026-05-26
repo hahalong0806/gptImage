@@ -297,6 +297,25 @@ export function ConfigCard() {
               </span>
               <span className="ml-2 text-stone-400">修改后需要点保存，或通过测试/同步按钮自动保存。</span>
             </div>
+            {isBrowserImageStorage ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+                <span>当前清空通知状态：</span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium ${
+                    hasActiveBrowserClearSignal
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {hasActiveBrowserClearSignal ? "开启中" : "已关闭"}
+                </span>
+                <span className="text-stone-400">
+                  {hasActiveBrowserClearSignal
+                    ? "新的浏览器或设备首次登录时仍会执行一次本地清空。"
+                    : "新的浏览器或设备不会再收到这次旧清空。"}
+                </span>
+              </div>
+            ) : null}
             {hasActiveBrowserClearSignal ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 当前存在一条浏览器全局清空通知。尚未同步过这次通知的新浏览器或新设备登录后，会执行一次本地清空；你可以点“关闭清空通知”停止继续传播。
