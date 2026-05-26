@@ -38,6 +38,7 @@ export function ConfigCard() {
   const testImageStorage = useSettingsStore((state) => state.testImageStorage);
   const syncImagesToWebDAV = useSettingsStore((state) => state.syncImagesToWebDAV);
   const clearBrowserImageStorage = useSettingsStore((state) => state.clearBrowserImageStorage);
+  const closeBrowserImageStorageClearSignal = useSettingsStore((state) => state.closeBrowserImageStorageClearSignal);
   const isTestingImageStorage = useSettingsStore((state) => state.isTestingImageStorage);
   const isSyncingImageStorage = useSettingsStore((state) => state.isSyncingImageStorage);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
@@ -46,6 +47,7 @@ export function ConfigCard() {
     && (config?.image_storage?.mode === "webdav" || config?.image_storage?.mode === "both");
   const isBrowserImageStorage =
     Boolean(config?.image_storage?.enabled) && config?.image_storage?.mode === "browser";
+  const hasActiveBrowserClearSignal = Boolean(String(config?.image_storage?.browser_clear_token || "").trim());
 
   const handleTestProxy = async () => {
     const candidate = String(config?.proxy || "").trim();
@@ -266,6 +268,15 @@ export function ConfigCard() {
                   <Trash2 className="size-4" />
                   清空浏览器图片
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
+                  onClick={() => void closeBrowserImageStorageClearSignal()}
+                  disabled={!hasActiveBrowserClearSignal}
+                >
+                  关闭清空通知
+                </Button>
               </div>
             </div>
             <p className="text-xs leading-6 text-stone-500">
@@ -286,6 +297,11 @@ export function ConfigCard() {
               </span>
               <span className="ml-2 text-stone-400">修改后需要点保存，或通过测试/同步按钮自动保存。</span>
             </div>
+            {hasActiveBrowserClearSignal ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                当前存在一条浏览器全局清空通知。尚未同步过这次通知的新浏览器或新设备登录后，会执行一次本地清空；你可以点“关闭清空通知”停止继续传播。
+              </div>
+            ) : null}
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm text-stone-700">保存模式</label>

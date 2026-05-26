@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   clearBrowserImageStorageSignal,
+  closeBrowserImageStorageSignal,
   createCPAPool,
   deleteBackup,
   deleteCPAPool,
@@ -222,6 +223,7 @@ type SettingsStore = {
   testImageStorage: () => Promise<void>;
   syncImagesToWebDAV: () => Promise<void>;
   clearBrowserImageStorage: () => Promise<void>;
+  closeBrowserImageStorageClearSignal: () => Promise<void>;
   setBackupField: (key: keyof BackupSettings, value: string | boolean) => void;
   setBackupInclude: (key: keyof BackupSettings["include"], value: boolean) => void;
 
@@ -569,6 +571,34 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       toast.success(result.removed > 0 ? `已清空本机 ${result.removed} 张浏览器图片，并已通知其他用户同步清空` : "已发送全局清空通知，其他用户会自动同步");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "清空浏览器图片失败");
+    }
+  },
+
+  closeBrowserImageStorageClearSignal: async () => {
+    try {
+      const saved = await get().saveConfig();
+      if (!saved) {
+        return;
+      }
+      const data = await closeBrowserImageStorageSignal();
+      set((state) => state.config ? {
+        config: normalizeConfig({
+          ...state.config,
+          image_storage: {
+            enabled: Boolean(state.config.image_storage?.enabled),
+            mode: (state.config.image_storage?.mode || "local") as ImageStorageMode,
+            webdav_url: String(state.config.image_storage?.webdav_url || ""),
+            webdav_username: String(state.config.image_storage?.webdav_username || ""),
+            webdav_password: String(state.config.image_storage?.webdav_password || ""),
+            webdav_root_path: String(state.config.image_storage?.webdav_root_path || "chatgpt2api/images"),
+            public_base_url: String(state.config.image_storage?.public_base_url || ""),
+            browser_clear_token: String(data.image_storage.browser_clear_token || ""),
+          },
+        }),
+      } : {});
+      toast.success("已关闭本次浏览器清空通知，新登录用户不会再收到这次清空");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "关闭浏览器清空通知失败");
     }
   },
 

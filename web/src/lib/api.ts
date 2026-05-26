@@ -493,6 +493,13 @@ export async function clearBrowserImageStorageSignal() {
   });
 }
 
+export async function closeBrowserImageStorageSignal() {
+  return httpRequest<{ image_storage: PublicImageStorageConfig }>("/api/image-storage/browser/clear/close", {
+    method: "POST",
+    body: {},
+  });
+}
+
 export async function syncImageStorage() {
   return httpRequest<{ result: { uploaded: number; skipped: number; failed: number } }>("/api/image-storage/sync", {
     method: "POST",

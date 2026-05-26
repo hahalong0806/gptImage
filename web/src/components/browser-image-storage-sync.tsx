@@ -31,8 +31,11 @@ export function BrowserImageStorageSync() {
           return;
         }
         const result = await syncBrowserImageClearSignal(String(data.image_storage.browser_clear_token || ""));
-        if (result.applied) {
-          toast.success(result.removed > 0 ? `管理员已清空浏览器图片，本地同步清除了 ${result.removed} 张` : "管理员已发起浏览器图片清空，本地已同步");
+        if (!active) {
+          return;
+        }
+        if (result.applied && result.removed > 0) {
+          toast.success(`管理员已清空浏览器图片，本地同步清除了 ${result.removed} 张`);
         }
         if (data.image_storage.mode === "browser" && Number(data.image_storage.image_retention_days) > 0) {
           await pruneExpiredBrowserManagedImages(Number(data.image_storage.image_retention_days));

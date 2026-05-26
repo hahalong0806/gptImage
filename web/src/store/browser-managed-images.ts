@@ -26,6 +26,25 @@ const BROWSER_IMAGE_CLEAR_TOKEN_KEY = "browser_image_clear_token";
 const DELETED_IMAGE_ERROR = "生成结果已删除";
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+function readClearTokenFromLocalStorage() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return String(window.localStorage.getItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY) || "").trim();
+}
+
+function writeClearTokenToLocalStorage(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalizedToken = String(token || "").trim();
+  if (normalizedToken) {
+    window.localStorage.setItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY, normalizedToken);
+    return;
+  }
+  window.localStorage.removeItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY);
+}
+
 function normalizeTagMap(value: unknown): BrowserTagMap {
   if (!value || typeof value !== "object") {
     return {};
@@ -55,12 +74,26 @@ async function writeBrowserTagMap(tagMap: BrowserTagMap) {
 }
 
 async function getAppliedBrowserClearToken() {
+  const localStorageToken = readClearTokenFromLocalStorage();
+  if (localStorageToken) {
+    return localStorageToken;
+  }
   const value = await browserImageTagStorage.getItem<string>(BROWSER_IMAGE_CLEAR_TOKEN_KEY);
-  return String(value || "").trim();
+  const normalizedToken = String(value || "").trim();
+  if (normalizedToken) {
+    writeClearTokenToLocalStorage(normalizedToken);
+  }
+  return normalizedToken;
 }
 
 async function setAppliedBrowserClearToken(token: string) {
-  await browserImageTagStorage.setItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY, String(token || "").trim());
+  const normalizedToken = String(token || "").trim();
+  writeClearTokenToLocalStorage(normalizedToken);
+  if (normalizedToken) {
+    await browserImageTagStorage.setItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY, normalizedToken);
+    return;
+  }
+  await browserImageTagStorage.removeItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY);
 }
 
 function managedImageRel(conversationId: string, turnId: string, imageId: string) {
