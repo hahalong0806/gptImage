@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from api.image_inputs import parse_image_edit_request, read_image_sources
 from api.support import require_identity, resolve_image_base_url
 from services.content_filter import check_request
+from services.config import config
 from services.image_task_service import image_task_service
 from services.log_service import LoggedCall
 
@@ -30,6 +31,15 @@ async def filter_or_log(call: LoggedCall, text: str) -> None:
         raise
 
 
+def _require_non_browser_storage_mode() -> None:
+    mode = str(config.get_image_storage_settings().get("mode") or "local").strip().lower()
+    if mode == "browser":
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "浏览器 IndexedDB 模式下不支持后端图片任务队列，请使用网页端直接生成"},
+        )
+
+
 def create_router() -> APIRouter:
     router = APIRouter()
 
@@ -47,6 +57,7 @@ def create_router() -> APIRouter:
         request: Request,
         authorization: str | None = Header(default=None),
     ):
+        _require_non_browser_storage_mode()
         identity = require_identity(authorization)
         await filter_or_log(LoggedCall(identity, "/api/image-tasks/generations", body.model, "文生图任务", request_text=body.prompt), body.prompt)
         try:
@@ -67,6 +78,7 @@ def create_router() -> APIRouter:
         request: Request,
         authorization: str | None = Header(default=None),
     ):
+        _require_non_browser_storage_mode()
         identity = require_identity(authorization)
         payload, image_sources = await parse_image_edit_request(request)
         client_task_id = str(payload.get("client_task_id") or "").strip()

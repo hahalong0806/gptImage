@@ -33,6 +33,7 @@ import {
   type RegisterConfig,
   type SettingsConfig,
 } from "@/lib/api";
+import { clearBrowserManagedImages } from "@/store/browser-managed-images";
 
 export const PAGE_SIZE_OPTIONS = ["50", "100", "200"] as const;
 
@@ -54,6 +55,8 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
     ? "both"
     : imageStorage.enabled && imageStorage.mode === "webdav"
       ? "webdav"
+      : imageStorage.enabled && imageStorage.mode === "browser"
+        ? "browser"
       : "local";
   const backup = typeof config.backup === "object" && config.backup
     ? config.backup as BackupSettings
@@ -215,6 +218,7 @@ type SettingsStore = {
   setImageStorageField: (key: keyof ImageStorageSettings, value: string | boolean) => void;
   testImageStorage: () => Promise<void>;
   syncImagesToWebDAV: () => Promise<void>;
+  clearBrowserImageStorage: () => Promise<void>;
   setBackupField: (key: keyof BackupSettings, value: string | boolean) => void;
   setBackupInclude: (key: keyof BackupSettings["include"], value: boolean) => void;
 
@@ -355,7 +359,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         },
         image_storage: {
           enabled: Boolean(config.image_storage?.enabled),
-          mode: config.image_storage?.enabled && ["webdav", "both"].includes(String(config.image_storage?.mode)) ? config.image_storage.mode : "local",
+          mode:
+            config.image_storage?.enabled && ["webdav", "both", "browser"].includes(String(config.image_storage?.mode))
+              ? config.image_storage.mode
+              : "local",
           webdav_url: String(config.image_storage?.webdav_url || "").trim(),
           webdav_username: String(config.image_storage?.webdav_username || "").trim(),
           webdav_password: String(config.image_storage?.webdav_password || "").trim(),
@@ -528,6 +535,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       toast.error(error instanceof Error ? error.message : "同步图片失败");
     } finally {
       set({ isSyncingImageStorage: false });
+    }
+  },
+
+  clearBrowserImageStorage: async () => {
+    try {
+      const result = await clearBrowserManagedImages();
+      toast.success(result.removed > 0 ? `已清空 ${result.removed} 张浏览器图片` : "浏览器图片已是空的");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "清空浏览器图片失败");
     }
   },
 

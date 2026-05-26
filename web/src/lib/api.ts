@@ -96,7 +96,7 @@ export type SettingsConfig = {
   [key: string]: unknown;
 };
 
-export type ImageStorageMode = "local" | "webdav" | "both";
+export type ImageStorageMode = "local" | "webdav" | "both" | "browser";
 
 export type ImageStorageSettings = {
   enabled: boolean;
@@ -105,6 +105,12 @@ export type ImageStorageSettings = {
   webdav_username: string;
   webdav_password: string;
   webdav_root_path: string;
+  public_base_url: string;
+};
+
+export type PublicImageStorageConfig = {
+  enabled: boolean;
+  mode: ImageStorageMode;
   public_base_url: string;
 };
 
@@ -182,7 +188,7 @@ export type ManagedImage = {
   url: string;
   thumbnail_url?: string;
   created_at: string;
-  storage?: "local" | "webdav" | "both" | string;
+  storage?: "local" | "webdav" | "both" | "browser" | string;
   local?: boolean;
   webdav?: boolean;
   width?: number;
@@ -471,6 +477,10 @@ export async function testImageStorageConnection() {
     method: "POST",
     body: {},
   });
+}
+
+export async function fetchImageStorageConfig() {
+  return httpRequest<{ image_storage: PublicImageStorageConfig }>("/api/image-storage/config");
 }
 
 export async function syncImageStorage() {

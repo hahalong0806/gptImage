@@ -105,7 +105,7 @@ def _normalize_backup_state(value: object) -> dict[str, object]:
 def _normalize_image_storage_settings(value: object) -> dict[str, object]:
     source = value if isinstance(value, dict) else {}
     mode = str(source.get("mode") or "local").strip().lower()
-    if mode not in {"local", "webdav", "both"}:
+    if mode not in {"local", "webdav", "both", "browser"}:
         mode = "local"
     enabled = _normalize_bool(source.get("enabled"), False)
     if not enabled:
@@ -124,6 +124,8 @@ def _normalize_image_storage_settings(value: object) -> dict[str, object]:
 
 def _validate_image_storage_settings(settings: dict[str, object]) -> None:
     if not _normalize_bool(settings.get("enabled"), False):
+        return
+    if str(settings.get("mode") or "local").strip().lower() == "browser":
         return
     if not str(settings.get("webdav_url") or "").strip():
         raise ValueError("启用 WebDAV 图片存储后必须填写 WebDAV URL")

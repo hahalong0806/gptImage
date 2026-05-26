@@ -71,6 +71,11 @@ def save_image_bytes(image_data: bytes, base_url: str | None = None) -> str:
     return image_storage_service.save(image_data, base_url).url
 
 
+def should_persist_images() -> bool:
+    mode = str(config.get_image_storage_settings().get("mode") or "local").strip().lower()
+    return mode != "browser"
+
+
 def message_text(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -185,22 +190,28 @@ def format_image_result(
     message: str = "",
 ) -> dict[str, Any]:
     data: list[dict[str, Any]] = []
+    persist_images = should_persist_images()
     for item in items:
         b64_json = str(item.get("b64_json") or "").strip()
         if not b64_json:
             continue
         revised_prompt = str(item.get("revised_prompt") or prompt).strip() or prompt
+        saved_url = save_image_bytes(base64.b64decode(b64_json), base_url) if persist_images else ""
         if response_format == "b64_json":
-            data.append({
+            payload = {
                 "b64_json": b64_json,
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
                 "revised_prompt": revised_prompt,
-            })
+            }
+            if saved_url:
+                payload["url"] = saved_url
+            data.append(payload)
         else:
-            data.append({
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
-                "revised_prompt": revised_prompt,
-            })
+            payload = {"revised_prompt": revised_prompt}
+            if saved_url:
+                payload["url"] = saved_url
+            else:
+                payload["b64_json"] = b64_json
+            data.append(payload)
     result: dict[str, Any] = {"created": created or int(time.time()), "data": data}
     if message and not data:
         result["message"] = message

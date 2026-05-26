@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, LoaderCircle, PlugZap, RefreshCw, Save } from "lucide-react";
+import { Cloud, LoaderCircle, PlugZap, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -37,9 +37,15 @@ export function ConfigCard() {
   const setImageStorageField = useSettingsStore((state) => state.setImageStorageField);
   const testImageStorage = useSettingsStore((state) => state.testImageStorage);
   const syncImagesToWebDAV = useSettingsStore((state) => state.syncImagesToWebDAV);
+  const clearBrowserImageStorage = useSettingsStore((state) => state.clearBrowserImageStorage);
   const isTestingImageStorage = useSettingsStore((state) => state.isTestingImageStorage);
   const isSyncingImageStorage = useSettingsStore((state) => state.isSyncingImageStorage);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
+  const isWebDAVImageStorage =
+    Boolean(config?.image_storage?.enabled)
+    && (config?.image_storage?.mode === "webdav" || config?.image_storage?.mode === "both");
+  const isBrowserImageStorage =
+    Boolean(config?.image_storage?.enabled) && config?.image_storage?.mode === "browser";
 
   const handleTestProxy = async () => {
     const candidate = String(config?.proxy || "").trim();
@@ -227,7 +233,7 @@ export function ConfigCard() {
                   checked={Boolean(config?.image_storage?.enabled)}
                   onCheckedChange={(checked) => setImageStorageField("enabled", Boolean(checked))}
                 />
-                启用 WebDAV 图片存储
+                启用自定义图片存储
               </label>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -235,7 +241,7 @@ export function ConfigCard() {
                   variant="outline"
                   className="h-9 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
                   onClick={() => void testImageStorage()}
-                  disabled={isTestingImageStorage || !config?.image_storage?.enabled}
+                  disabled={isTestingImageStorage || !isWebDAVImageStorage}
                 >
                   {isTestingImageStorage ? <LoaderCircle className="size-4 animate-spin" /> : <Cloud className="size-4" />}
                   测试 WebDAV
@@ -245,15 +251,25 @@ export function ConfigCard() {
                   variant="outline"
                   className="h-9 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
                   onClick={() => void syncImagesToWebDAV()}
-                  disabled={isSyncingImageStorage || !config?.image_storage?.enabled || config?.image_storage?.mode === "local"}
+                  disabled={isSyncingImageStorage || !isWebDAVImageStorage}
                 >
                   {isSyncingImageStorage ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                   全量同步
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-xl border-rose-200 bg-white px-4 text-rose-600 hover:bg-rose-50"
+                  onClick={() => void clearBrowserImageStorage()}
+                  disabled={!isBrowserImageStorage}
+                >
+                  <Trash2 className="size-4" />
+                  清空浏览器图片
+                </Button>
               </div>
             </div>
             <p className="text-xs leading-6 text-stone-500">
-              生成时只处理本次新图片；全量同步用于把已有本地图片补传到 WebDAV。
+              `WebDAV` 模式下，生成时只处理本次新图片；全量同步用于把已有本地图片补传到 WebDAV。`浏览器 IndexedDB` 模式下，图片只保存在当前浏览器。
             </p>
             <div className="rounded-lg border border-stone-100 bg-stone-50 px-3 py-2 text-xs text-stone-600">
               当前待保存模式：
@@ -263,6 +279,8 @@ export function ConfigCard() {
                     ? "本机 + WebDAV"
                     : config.image_storage.mode === "webdav"
                       ? "仅 WebDAV"
+                      : config.image_storage.mode === "browser"
+                        ? "浏览器 IndexedDB"
                       : "仅本机"
                   : "仅本机"}
               </span>
@@ -283,59 +301,71 @@ export function ConfigCard() {
                     <SelectItem value="local">仅本机</SelectItem>
                     <SelectItem value="webdav">仅 WebDAV</SelectItem>
                     <SelectItem value="both">本机 + WebDAV</SelectItem>
+                    <SelectItem value="browser">浏览器 IndexedDB</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm text-stone-700">WebDAV URL</label>
-                <Input
-                  value={String(config?.image_storage?.webdav_url || "")}
-                  onChange={(event) => setImageStorageField("webdav_url", event.target.value)}
-                  placeholder="https://example.com/dav"
-                  className="h-10 rounded-xl border-stone-200 bg-white"
-                  disabled={!config?.image_storage?.enabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-stone-700">用户名</label>
-                <Input
-                  value={String(config?.image_storage?.webdav_username || "")}
-                  onChange={(event) => setImageStorageField("webdav_username", event.target.value)}
-                  className="h-10 rounded-xl border-stone-200 bg-white"
-                  disabled={!config?.image_storage?.enabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-stone-700">密码</label>
-                <Input
-                  type="password"
-                  value={String(config?.image_storage?.webdav_password || "")}
-                  onChange={(event) => setImageStorageField("webdav_password", event.target.value)}
-                  className="h-10 rounded-xl border-stone-200 bg-white"
-                  disabled={!config?.image_storage?.enabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-stone-700">远端目录</label>
-                <Input
-                  value={String(config?.image_storage?.webdav_root_path || "")}
-                  onChange={(event) => setImageStorageField("webdav_root_path", event.target.value)}
-                  placeholder="chatgpt2api/images"
-                  className="h-10 rounded-xl border-stone-200 bg-white"
-                  disabled={!config?.image_storage?.enabled}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-3">
-                <label className="text-sm text-stone-700">公开访问前缀</label>
-                <Input
-                  value={String(config?.image_storage?.public_base_url || "")}
-                  onChange={(event) => setImageStorageField("public_base_url", event.target.value)}
-                  placeholder="https://cdn.example.com/chatgpt2api/images"
-                  className="h-10 rounded-xl border-stone-200 bg-white"
-                  disabled={!config?.image_storage?.enabled}
-                />
-                <p className="text-xs text-stone-500">留空时返回本应用 /images/... 代理地址；填入后直接返回公开图片地址。</p>
-              </div>
+              {isWebDAVImageStorage ? (
+                <>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm text-stone-700">WebDAV URL</label>
+                    <Input
+                      value={String(config?.image_storage?.webdav_url || "")}
+                      onChange={(event) => setImageStorageField("webdav_url", event.target.value)}
+                      placeholder="https://example.com/dav"
+                      className="h-10 rounded-xl border-stone-200 bg-white"
+                      disabled={!config?.image_storage?.enabled}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-stone-700">用户名</label>
+                    <Input
+                      value={String(config?.image_storage?.webdav_username || "")}
+                      onChange={(event) => setImageStorageField("webdav_username", event.target.value)}
+                      className="h-10 rounded-xl border-stone-200 bg-white"
+                      disabled={!config?.image_storage?.enabled}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-stone-700">密码</label>
+                    <Input
+                      type="password"
+                      value={String(config?.image_storage?.webdav_password || "")}
+                      onChange={(event) => setImageStorageField("webdav_password", event.target.value)}
+                      className="h-10 rounded-xl border-stone-200 bg-white"
+                      disabled={!config?.image_storage?.enabled}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-stone-700">远端目录</label>
+                    <Input
+                      value={String(config?.image_storage?.webdav_root_path || "")}
+                      onChange={(event) => setImageStorageField("webdav_root_path", event.target.value)}
+                      placeholder="chatgpt2api/images"
+                      className="h-10 rounded-xl border-stone-200 bg-white"
+                      disabled={!config?.image_storage?.enabled}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-3">
+                    <label className="text-sm text-stone-700">公开访问前缀</label>
+                    <Input
+                      value={String(config?.image_storage?.public_base_url || "")}
+                      onChange={(event) => setImageStorageField("public_base_url", event.target.value)}
+                      placeholder="https://cdn.example.com/chatgpt2api/images"
+                      className="h-10 rounded-xl border-stone-200 bg-white"
+                      disabled={!config?.image_storage?.enabled}
+                    />
+                    <p className="text-xs text-stone-500">留空时返回本应用 /images/... 代理地址；填入后直接返回公开图片地址。</p>
+                  </div>
+                </>
+              ) : null}
+              {isBrowserImageStorage ? (
+                <div className="space-y-2 md:col-span-3">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                    浏览器模式只会把图片保存在当前浏览器的 IndexedDB 中，不会进入服务器图片管理目录，也不会跨设备同步。清空浏览器缓存、换浏览器或换设备后，这些图片不会自动跟过去。
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="space-y-4 rounded-xl border border-stone-200 bg-white px-4 py-3 md:col-span-2">

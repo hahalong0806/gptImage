@@ -158,6 +158,18 @@ def create_router(app_version: str) -> APIRouter:
         require_admin(authorization)
         return {"result": await run_in_threadpool(image_storage_service.test_webdav)}
 
+    @router.get("/api/image-storage/config")
+    async def get_image_storage_config(authorization: str | None = Header(default=None)):
+        require_identity(authorization)
+        settings = config.get_image_storage_settings()
+        return {
+            "image_storage": {
+                "enabled": bool(settings.get("enabled")),
+                "mode": str(settings.get("mode") or "local"),
+                "public_base_url": str(settings.get("public_base_url") or ""),
+            }
+        }
+
     @router.post("/api/image-storage/sync")
     async def sync_image_storage_endpoint(authorization: str | None = Header(default=None)):
         require_admin(authorization)

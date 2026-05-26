@@ -18,11 +18,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  editImage,
   createImageEditTask,
   createImageGenerationTask,
   fetchAccounts,
+  fetchImageStorageConfig,
   fetchImageTasks,
+  generateImage,
   type Account,
+  type ImageStorageMode,
   type ImageTask,
 } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
@@ -208,6 +212,26 @@ function taskDataToStoredImage(image: StoredImage, task: ImageTask): StoredImage
   };
 }
 
+function directDataToStoredImage(image: StoredImage, item: { b64_json?: string; url?: string; revised_prompt?: string } | undefined): StoredImage {
+  if (!item?.b64_json && !item?.url) {
+    return {
+      ...image,
+      taskId: undefined,
+      status: "error",
+      error: "未返回图片数据",
+    };
+  }
+  return {
+    ...image,
+    taskId: undefined,
+    status: "success",
+    b64_json: item?.b64_json,
+    url: item?.url,
+    revised_prompt: item?.revised_prompt,
+    error: undefined,
+  };
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -378,6 +402,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [availableQuota, setAvailableQuota] = useState("加载中...");
+  const [imageStorageMode, setImageStorageMode] = useState<ImageStorageMode>("local");
   const [lightboxImages, setLightboxImages] = useState<ImageLightboxItem[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -504,6 +529,28 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     };
 
     void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadImageStorageMode = async () => {
+      try {
+        const data = await fetchImageStorageConfig();
+        if (!cancelled) {
+          setImageStorageMode(data.image_storage.mode);
+        }
+      } catch {
+        if (!cancelled) {
+          setImageStorageMode("local");
+        }
+      }
+    };
+
+    void loadImageStorageMode();
     return () => {
       cancelled = true;
     };
@@ -890,15 +937,23 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     setLightboxOpen(true);
   }, []);
 
-  const createLoadingImages = (turnId: string, count: number) =>
-    Array.from({ length: count }, (_, index) => {
-      const imageId = `${turnId}-${index}`;
-      return {
-        id: imageId,
-        taskId: imageId,
-        status: "loading" as const,
-      };
-    });
+  const createLoadingImages = useCallback(
+    (turnId: string, count: number) =>
+      Array.from({ length: count }, (_, index) => {
+        const imageId = `${turnId}-${index}`;
+        return imageStorageMode === "browser"
+          ? {
+              id: imageId,
+              status: "loading" as const,
+            }
+          : {
+              id: imageId,
+              taskId: imageId,
+              status: "loading" as const,
+            };
+      }),
+    [imageStorageMode],
+  );
 
   /* eslint-disable react-hooks/preserve-manual-memoization */
   const runConversationQueue = useCallback(
@@ -959,7 +1014,11 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
                     status: "generating",
                     error: undefined,
                     images: turn.images.map((image) =>
-                      image.status === "loading" ? { ...image, taskId: image.taskId || image.id } : image,
+                      image.status === "loading"
+                        ? imageStorageMode === "browser"
+                          ? { ...image, taskId: undefined }
+                          : { ...image, taskId: image.taskId || image.id }
+                        : image,
                     ),
                   }
                 : turn,
@@ -975,6 +1034,57 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
         }
 
         const pendingImages = activeTurn.images.filter((image) => image.status === "loading");
+        if (imageStorageMode === "browser") {
+          const directResults = await Promise.allSettled(
+            pendingImages.map(() =>
+              activeTurn.mode === "edit"
+                ? editImage(referenceFiles, activeTurn.prompt, activeTurn.model, activeTurn.size)
+                : generateImage(activeTurn.prompt, activeTurn.model, activeTurn.size),
+            ),
+          );
+
+          await updateConversation(conversationId, (current) => {
+            const conversation = current ?? snapshot;
+            const turns = conversation.turns.map((turn) => {
+              if (turn.id !== activeTurn.id) {
+                return turn;
+              }
+              let loadingIndex = 0;
+              const images = turn.images.map((image) => {
+                if (image.status !== "loading") {
+                  return image;
+                }
+                const result = directResults[loadingIndex];
+                loadingIndex += 1;
+                if (result?.status === "fulfilled") {
+                  return directDataToStoredImage(image, result.value.data?.[0]);
+                }
+                const message = result?.reason instanceof Error ? result.reason.message : "生成失败";
+                return {
+                  ...image,
+                  taskId: undefined,
+                  status: "error" as const,
+                  error: message,
+                };
+              });
+              const derived = deriveTurnStatus({ ...turn, status: "generating", images });
+              return {
+                ...turn,
+                ...derived,
+                images,
+              };
+            });
+            return {
+              ...conversation,
+              updatedAt: new Date().toISOString(),
+              turns,
+            };
+          });
+
+          await loadQuota();
+          return;
+        }
+
         const submitted = await Promise.all(
           pendingImages.map((image) => {
             const taskId = image.taskId || image.id;
@@ -1057,7 +1167,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
         }
       }
     },
-    [loadQuota, updateConversation],
+    [editImage, generateImage, imageStorageMode, loadQuota, updateConversation],
   );
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
@@ -1095,7 +1205,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       void runConversationQueue(conversationId);
       toast.success("已加入重新生成队列");
     },
-    [runConversationQueue],
+    [createLoadingImages, runConversationQueue],
   );
 
   const handleRetryImage = useCallback(
@@ -1122,7 +1232,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             image.id === imageId
               ? {
                   id: retryImageId,
-                  taskId: retryImageId,
+                  taskId: imageStorageMode === "browser" ? undefined : retryImageId,
                   status: "loading" as const,
                 }
               : image,
@@ -1140,7 +1250,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       await persistConversation(nextConversation);
       void runConversationQueue(conversationId);
     },
-    [runConversationQueue],
+    [imageStorageMode, runConversationQueue],
   );
 
   useEffect(() => {

@@ -13,12 +13,35 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { deleteImageTag, deleteManagedImages, downloadImages, downloadSingleImage, fetchImageTags, fetchManagedImages, setImageTags, type ManagedImage } from "@/lib/api";
+import {
+  deleteImageTag,
+  deleteManagedImages,
+  downloadImages,
+  downloadSingleImage,
+  fetchImageStorageConfig,
+  fetchImageTags,
+  fetchManagedImages,
+  setImageTags,
+  type ImageStorageMode,
+  type ManagedImage,
+} from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
+import {
+  deleteBrowserImageTag,
+  deleteBrowserManagedImages,
+  downloadBrowserManagedImage,
+  downloadBrowserManagedImages,
+  fetchBrowserImageTags,
+  listBrowserManagedImages,
+  setBrowserImageTags,
+} from "@/store/browser-managed-images";
 
 const LONG_PRESS_MS = 800;
 
 function storageBadge(item: ManagedImage) {
+  if (item.storage === "browser") {
+    return { label: "浏览器", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  }
   if (item.local && item.webdav) {
     return { label: "双端", className: "border-sky-200 bg-sky-50 text-sky-700" };
   }
@@ -68,6 +91,7 @@ function useLongPress(onLongPress: () => void, ms = LONG_PRESS_MS) {
 
 function ImageManagerContent() {
   const [items, setItems] = useState<ManagedImage[]>([]);
+  const [storageMode, setStorageMode] = useState<ImageStorageMode>("local");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -89,6 +113,7 @@ function ImageManagerContent() {
   const filteredItems = selectedTags.length > 0
     ? items.filter((item) => selectedTags.every((t) => (item.tags ?? []).includes(t)))
     : items;
+  const isBrowserStorageMode = storageMode === "browser";
 
   const lightboxImages = filteredItems.map((item) => ({
     id: item.name,
@@ -101,17 +126,27 @@ function ImageManagerContent() {
   const safePage = Math.min(page, pageCount);
   const currentRows = filteredItems.slice((safePage - 1) * pageSize, safePage * pageSize);
   const selectedSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
-  const selectedCount = deleteMode === "filtered" ? items.length : selectedPaths.length;
+  const selectedCount = deleteMode === "filtered" ? (isBrowserStorageMode ? filteredItems.length : items.length) : selectedPaths.length;
   const currentPageSelected = currentRows.length > 0 && currentRows.every((item) => selectedSet.has(imageKey(item)));
   const allSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedSet.has(imageKey(item)));
 
   const loadImages = async () => {
     setIsLoading(true);
     try {
-      const [data, tagsData] = await Promise.all([
-        fetchManagedImages({ start_date: startDate, end_date: endDate }),
-        fetchImageTags(),
-      ]);
+      const storage = await fetchImageStorageConfig();
+      const nextMode = storage.image_storage.mode;
+      setStorageMode(nextMode);
+      const [data, tagsData] = await Promise.all(
+        nextMode === "browser"
+          ? [
+              listBrowserManagedImages({ start_date: startDate, end_date: endDate }),
+              fetchBrowserImageTags(),
+            ]
+          : [
+              fetchManagedImages({ start_date: startDate, end_date: endDate }),
+              fetchImageTags(),
+            ],
+      );
       setItems(data.items);
       setAllTags(tagsData.tags);
       setSelectedPaths((current) => current.filter((path) => data.items.some((item) => imageKey(item) === path)));
@@ -138,7 +173,11 @@ function ImageManagerContent() {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await deleteManagedImages({ paths: [deleteTarget.rel] });
+      if (isBrowserStorageMode) {
+        await deleteBrowserManagedImages({ paths: [deleteTarget.rel] });
+      } else {
+        await deleteManagedImages({ paths: [deleteTarget.rel] });
+      }
       setItems((prev) => prev.filter((item) => item.rel !== deleteTarget.rel));
       setSelectedPaths((prev) => prev.filter((p) => p !== imageKey(deleteTarget)));
       toast.success("图片已删除");
@@ -152,9 +191,11 @@ function ImageManagerContent() {
 
   const handleSetTags = async (item: ManagedImage, tags: string[]) => {
     try {
-      const result = await setImageTags(item.rel, tags);
+      const result = isBrowserStorageMode
+        ? await setBrowserImageTags(item.rel, tags)
+        : await setImageTags(item.rel, tags);
       setItems((prev) => prev.map((i) => i.rel === item.rel ? { ...i, tags: result.tags } : i));
-      const tagsData = await fetchImageTags();
+      const tagsData = isBrowserStorageMode ? await fetchBrowserImageTags() : await fetchImageTags();
       setAllTags(tagsData.tags);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "设置标签失败");
@@ -188,7 +229,7 @@ function ImageManagerContent() {
 
   const handleDeleteTag = async (tag: string) => {
     try {
-      const result = await deleteImageTag(tag);
+      const result = isBrowserStorageMode ? await deleteBrowserImageTag(tag) : await deleteImageTag(tag);
       setAllTags((prev) => prev.filter((t) => t !== tag));
       setSelectedTags((prev) => prev.filter((t) => t !== tag));
       setItems((prev) => prev.map((item) => ({
@@ -231,7 +272,17 @@ function ImageManagerContent() {
     if (!deleteMode || selectedCount === 0) return;
     setIsDeleting(true);
     try {
-      const data = await deleteManagedImages(deleteMode === "filtered" ? { start_date: startDate, end_date: endDate, all_matching: true } : { paths: selectedPaths });
+      const data = isBrowserStorageMode
+        ? await deleteBrowserManagedImages(
+            deleteMode === "filtered"
+              ? { paths: filteredItems.map((item) => item.rel) }
+              : { paths: selectedPaths },
+          )
+        : await deleteManagedImages(
+            deleteMode === "filtered"
+              ? { start_date: startDate, end_date: endDate, all_matching: true }
+              : { paths: selectedPaths },
+          );
       toast.success(`已删除 ${data.removed} 张图片`);
       setDeleteMode(null);
       setSelectedPaths([]);
@@ -244,11 +295,17 @@ function ImageManagerContent() {
   };
 
   const handleBatchDownload = async () => {
-    const paths = deleteMode === "filtered" ? items.map((item) => item.rel) : selectedPaths;
+    const paths = deleteMode === "filtered"
+      ? (isBrowserStorageMode ? filteredItems.map((item) => item.rel) : items.map((item) => item.rel))
+      : selectedPaths;
     if (paths.length === 0) return;
     setIsDownloading(true);
     try {
-      await downloadImages(paths);
+      if (isBrowserStorageMode) {
+        await downloadBrowserManagedImages(paths);
+      } else {
+        await downloadImages(paths);
+      }
       toast.success(`已下载 ${paths.length} 张图片`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "下载失败");
@@ -258,6 +315,10 @@ function ImageManagerContent() {
   };
 
   const handleSingleDownload = async (item: ManagedImage) => {
+    if (isBrowserStorageMode) {
+      await downloadBrowserManagedImage(item.rel);
+      return;
+    }
     await downloadSingleImage(item.rel);
   };
 
@@ -271,6 +332,9 @@ function ImageManagerContent() {
         <div className="space-y-1">
           <div className="text-xs font-semibold tracking-[0.18em] text-stone-500 uppercase">Images</div>
           <h1 className="text-2xl font-semibold tracking-tight">图片管理</h1>
+          {isBrowserStorageMode ? (
+            <p className="text-sm text-amber-700">当前来源：浏览器 IndexedDB，仅当前浏览器可见。</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <DateRangeFilter startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
@@ -436,6 +500,10 @@ function ImageManagerContent() {
                         size="icon"
                         className="size-8 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
                         onClick={() => {
+                          if (isBrowserStorageMode) {
+                            toast.error("浏览器模式下没有可分享的公网地址");
+                            return;
+                          }
                           void navigator.clipboard.writeText(item.url);
                           toast.success("图片地址已复制");
                         }}
