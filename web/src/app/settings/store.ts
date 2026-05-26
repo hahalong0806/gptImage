@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 
 import {
+  clearBrowserImageStorageSignal,
   createCPAPool,
   deleteBackup,
   deleteCPAPool,
@@ -33,7 +34,7 @@ import {
   type RegisterConfig,
   type SettingsConfig,
 } from "@/lib/api";
-import { clearBrowserManagedImages } from "@/store/browser-managed-images";
+import { clearBrowserManagedImages, syncBrowserImageClearSignal } from "@/store/browser-managed-images";
 
 export const PAGE_SIZE_OPTIONS = ["50", "100", "200"] as const;
 
@@ -50,6 +51,7 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
       webdav_password: "",
       webdav_root_path: "chatgpt2api/images",
       public_base_url: "",
+      browser_clear_token: "",
     };
   const imageStorageMode: ImageStorageMode = imageStorage.enabled && imageStorage.mode === "both"
     ? "both"
@@ -112,6 +114,7 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
       webdav_password: String(imageStorage.webdav_password || ""),
       webdav_root_path: String(imageStorage.webdav_root_path || "chatgpt2api/images"),
       public_base_url: String(imageStorage.public_base_url || ""),
+      browser_clear_token: String(imageStorage.browser_clear_token || ""),
     },
     backup: {
       ...backup,
@@ -368,6 +371,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           webdav_password: String(config.image_storage?.webdav_password || "").trim(),
           webdav_root_path: String(config.image_storage?.webdav_root_path || "chatgpt2api/images").trim(),
           public_base_url: String(config.image_storage?.public_base_url || "").trim(),
+          browser_clear_token: String(config.image_storage?.browser_clear_token || "").trim(),
         },
         backup: {
           ...(config.backup as BackupSettings),
@@ -540,8 +544,29 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   clearBrowserImageStorage: async () => {
     try {
+      const saved = await get().saveConfig();
+      if (!saved) {
+        return;
+      }
       const result = await clearBrowserManagedImages();
-      toast.success(result.removed > 0 ? `已清空 ${result.removed} 张浏览器图片` : "浏览器图片已是空的");
+      const data = await clearBrowserImageStorageSignal();
+      await syncBrowserImageClearSignal(String(data.image_storage.browser_clear_token || ""));
+      set((state) => state.config ? {
+        config: normalizeConfig({
+          ...state.config,
+          image_storage: {
+            enabled: Boolean(state.config.image_storage?.enabled),
+            mode: (state.config.image_storage?.mode || "local") as ImageStorageMode,
+            webdav_url: String(state.config.image_storage?.webdav_url || ""),
+            webdav_username: String(state.config.image_storage?.webdav_username || ""),
+            webdav_password: String(state.config.image_storage?.webdav_password || ""),
+            webdav_root_path: String(state.config.image_storage?.webdav_root_path || "chatgpt2api/images"),
+            public_base_url: String(state.config.image_storage?.public_base_url || ""),
+            browser_clear_token: String(data.image_storage.browser_clear_token || ""),
+          },
+        }),
+      } : {});
+      toast.success(result.removed > 0 ? `已清空本机 ${result.removed} 张浏览器图片，并已通知其他用户同步清空` : "已发送全局清空通知，其他用户会自动同步");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "清空浏览器图片失败");
     }

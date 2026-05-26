@@ -106,12 +106,15 @@ export type ImageStorageSettings = {
   webdav_password: string;
   webdav_root_path: string;
   public_base_url: string;
+  browser_clear_token?: string;
 };
 
 export type PublicImageStorageConfig = {
   enabled: boolean;
   mode: ImageStorageMode;
   public_base_url: string;
+  browser_clear_token?: string;
+  image_retention_days?: number;
 };
 
 export type BackupInclude = {
@@ -481,6 +484,13 @@ export async function testImageStorageConnection() {
 
 export async function fetchImageStorageConfig() {
   return httpRequest<{ image_storage: PublicImageStorageConfig }>("/api/image-storage/config");
+}
+
+export async function clearBrowserImageStorageSignal() {
+  return httpRequest<{ image_storage: PublicImageStorageConfig }>("/api/image-storage/browser/clear", {
+    method: "POST",
+    body: {},
+  });
 }
 
 export async function syncImageStorage() {

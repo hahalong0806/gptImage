@@ -22,7 +22,9 @@ const browserImageTagStorage = localforage.createInstance({
 });
 
 const BROWSER_IMAGE_TAGS_KEY = "items";
+const BROWSER_IMAGE_CLEAR_TOKEN_KEY = "browser_image_clear_token";
 const DELETED_IMAGE_ERROR = "生成结果已删除";
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function normalizeTagMap(value: unknown): BrowserTagMap {
   if (!value || typeof value !== "object") {
@@ -52,6 +54,15 @@ async function writeBrowserTagMap(tagMap: BrowserTagMap) {
   await browserImageTagStorage.setItem(BROWSER_IMAGE_TAGS_KEY, tagMap);
 }
 
+async function getAppliedBrowserClearToken() {
+  const value = await browserImageTagStorage.getItem<string>(BROWSER_IMAGE_CLEAR_TOKEN_KEY);
+  return String(value || "").trim();
+}
+
+async function setAppliedBrowserClearToken(token: string) {
+  await browserImageTagStorage.setItem(BROWSER_IMAGE_CLEAR_TOKEN_KEY, String(token || "").trim());
+}
+
 function managedImageRel(conversationId: string, turnId: string, imageId: string) {
   return `${conversationId}::${turnId}::${imageId}`;
 }
@@ -69,6 +80,11 @@ function base64Size(base64: string) {
 
 function imageDate(createdAt: string) {
   return String(createdAt || "").slice(0, 10);
+}
+
+function timestampOf(value: string) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function getStoredImageDataUrl(image: StoredImage) {
@@ -290,6 +306,26 @@ async function writeDeletedImages(targetRels: Set<string>) {
   return changed;
 }
 
+async function removeBrowserManagedImages(targetRels: Set<string>) {
+  if (targetRels.size === 0) {
+    return { removed: 0 };
+  }
+  await writeDeletedImages(targetRels);
+  const tagMap = await readBrowserTagMap();
+  let tagChanged = false;
+  for (const rel of targetRels) {
+    if (!(rel in tagMap)) {
+      continue;
+    }
+    delete tagMap[rel];
+    tagChanged = true;
+  }
+  if (tagChanged) {
+    await writeBrowserTagMap(tagMap);
+  }
+  return { removed: targetRels.size };
+}
+
 export async function deleteBrowserManagedImages(body: {
   paths?: string[];
   start_date?: string;
@@ -306,21 +342,20 @@ export async function deleteBrowserManagedImages(body: {
   if (targets.length === 0) {
     return { removed: 0 };
   }
-  const targetRels = new Set(targets);
-  await writeDeletedImages(targetRels);
-  const tagMap = await readBrowserTagMap();
-  let tagChanged = false;
-  for (const rel of targetRels) {
-    if (!(rel in tagMap)) {
-      continue;
-    }
-    delete tagMap[rel];
-    tagChanged = true;
+  return removeBrowserManagedImages(new Set(targets));
+}
+
+export async function pruneExpiredBrowserManagedImages(retentionDays: number) {
+  const normalizedRetentionDays = Math.max(1, Number(retentionDays) || 0);
+  const cutoffTimestamp = Date.now() - normalizedRetentionDays * DAY_IN_MS;
+  const { items } = await collectManagedImages();
+  const expiredRels = items
+    .filter((item) => timestampOf(item.created_at) < cutoffTimestamp)
+    .map((item) => item.rel);
+  if (expiredRels.length === 0) {
+    return { removed: 0 };
   }
-  if (tagChanged) {
-    await writeBrowserTagMap(tagMap);
-  }
-  return { removed: targets.length };
+  return removeBrowserManagedImages(new Set(expiredRels));
 }
 
 function dataUrlToBlob(dataUrl: string) {
@@ -388,4 +423,18 @@ export function getBrowserManagedImageRel(conversationId: string, turnId: string
 
 export function getBrowserManagedImageSourceIds(rel: string) {
   return splitManagedImageRel(rel);
+}
+
+export async function syncBrowserImageClearSignal(token: string) {
+  const normalizedToken = String(token || "").trim();
+  if (!normalizedToken) {
+    return { applied: false, removed: 0 };
+  }
+  const currentToken = await getAppliedBrowserClearToken();
+  if (currentToken === normalizedToken) {
+    return { applied: false, removed: 0 };
+  }
+  const result = await clearBrowserManagedImages();
+  await setAppliedBrowserClearToken(normalizedToken);
+  return { applied: true, removed: result.removed };
 }

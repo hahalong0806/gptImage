@@ -42,6 +42,7 @@ DEFAULT_IMAGE_STORAGE = {
     "webdav_password": "",
     "webdav_root_path": "chatgpt2api/images",
     "public_base_url": "",
+    "browser_clear_token": "",
 }
 
 
@@ -119,6 +120,7 @@ def _normalize_image_storage_settings(value: object) -> dict[str, object]:
         "webdav_password": str(source.get("webdav_password") or "").strip(),
         "webdav_root_path": root_path or str(DEFAULT_IMAGE_STORAGE["webdav_root_path"]),
         "public_base_url": str(source.get("public_base_url") or "").strip().rstrip("/"),
+        "browser_clear_token": str(source.get("browser_clear_token") or "").strip(),
     }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from urllib.parse import quote
+from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
@@ -167,6 +168,28 @@ def create_router(app_version: str) -> APIRouter:
                 "enabled": bool(settings.get("enabled")),
                 "mode": str(settings.get("mode") or "local"),
                 "public_base_url": str(settings.get("public_base_url") or ""),
+                "browser_clear_token": str(settings.get("browser_clear_token") or ""),
+                "image_retention_days": int(config.image_retention_days),
+            }
+        }
+
+    @router.post("/api/image-storage/browser/clear")
+    async def clear_browser_image_storage_endpoint(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        settings = config.get_image_storage_settings()
+        next_settings = {
+            **settings,
+            "browser_clear_token": uuid4().hex,
+        }
+        updated = config.update({"image_storage": next_settings})
+        image_storage = dict(updated.get("image_storage") or {})
+        return {
+            "image_storage": {
+                "enabled": bool(image_storage.get("enabled")),
+                "mode": str(image_storage.get("mode") or "local"),
+                "public_base_url": str(image_storage.get("public_base_url") or ""),
+                "browser_clear_token": str(image_storage.get("browser_clear_token") or ""),
+                "image_retention_days": int(config.image_retention_days),
             }
         }
 

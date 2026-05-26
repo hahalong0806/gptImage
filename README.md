@@ -85,7 +85,7 @@ bun install
 bun run dev
 ```
 
-后续更新新版本：
+hkc HERE后续更新新版本：
 
 ```bash
 git pull

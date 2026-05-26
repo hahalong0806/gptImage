@@ -33,6 +33,7 @@ import {
   downloadBrowserManagedImages,
   fetchBrowserImageTags,
   listBrowserManagedImages,
+  pruneExpiredBrowserManagedImages,
   setBrowserImageTags,
 } from "@/store/browser-managed-images";
 
@@ -136,6 +137,9 @@ function ImageManagerContent() {
       const storage = await fetchImageStorageConfig();
       const nextMode = storage.image_storage.mode;
       setStorageMode(nextMode);
+      if (nextMode === "browser" && Number(storage.image_storage.image_retention_days) > 0) {
+        await pruneExpiredBrowserManagedImages(Number(storage.image_storage.image_retention_days));
+      }
       const [data, tagsData] = await Promise.all(
         nextMode === "browser"
           ? [
