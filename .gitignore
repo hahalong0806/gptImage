@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 web_dist
+vortexa/.package/
+vortexa/.smoke*/
+vortexa/dist/
 # Virtual environments
 .venv
 .idea
